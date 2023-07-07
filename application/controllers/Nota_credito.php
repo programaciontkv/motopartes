@@ -126,6 +126,21 @@ class Nota_credito extends CI_Controller {
 					$vnd="";
 				}
 			}
+
+			$rst_iva= $this->configuracion_model->lista_una_configuracion('30');
+
+			$redu_iva = $rst_iva->con_valor;
+			$por_iva  = $rst_iva->con_valor2;
+			$cod_iva  = $rst_iva->con_valor3;
+
+			if($redu_iva==0){          
+			$t_iva= $por_iva;
+			}else{
+			$t_iva= 12;
+			}
+
+
+			
 			
 			$this->load->view('layout/header',$this->menus());
 			$this->load->view('layout/menu',$this->menus());
@@ -145,6 +160,7 @@ class Nota_credito extends CI_Controller {
 						'titulo'=>ucfirst(strtolower($rst_cja->emi_nombre)).' '.ucfirst(strtolower($rst_cja->cja_nombre)),
 						'cancelar'=>base_url().strtolower($rst_opc->opc_direccion).$rst_opc->opc_id,
 						'mensaje'=> $mensaje,
+						't_iva'=>$t_iva,
 						'nota'=> (object) array(
 											'ncr_fecha_emision'=>date('Y-m-d'),
 											'ncr_numero'=>'',
@@ -910,7 +926,9 @@ class Nota_credito extends CI_Controller {
 		}
 	}
 
-	public function load_producto($id,$inven,$ctr_inv,$emi){
+	public function load_producto($id,$inven,$ctr_inv,$emi,$fac){
+
+		$iva = $this->factura_model->lista_impuesto_detalle_factura($fac);
 
 		$rst=$this->producto_comercial_model->lista_un_producto_cod($id);
 		if(empty($rst)){
@@ -951,6 +969,12 @@ class Nota_credito extends CI_Controller {
 	        }    
 	        
 	        $precio=$rst->mp_e;	
+
+			if ($rst->mp_h==12) {
+				$impuesto = $iva->iva;
+			}else{
+				$impuesto = $rst->mp_h;
+			}
 	        
 			$data=array(
 						'pro_id'=>$rst->id,
@@ -958,7 +982,8 @@ class Nota_credito extends CI_Controller {
 						'pro_descripcion'=>$rst->mp_d,
 						'pro_codigo'=>$rst->mp_c,
 						'pro_precio'=>$precio,
-						'pro_iva'=>$rst->mp_h,
+						// 'pro_iva'=>$rst->mp_h,
+						'pro_iva'=>$impuesto,
 						'pro_descuento'=>$rst->mp_g,
 						'pro_unidad'=>$rst->mp_q,
 						'inventario'=>$inv,
@@ -1077,6 +1102,26 @@ class Nota_credito extends CI_Controller {
 			///recupera detalle
 			$cns_dt=$this->nota_credito_model->lista_detalle_nota($id);
 			$cns_det=array();
+
+			$rst_iva = $this->configuracion_model->lista_una_configuracion('30');
+
+			$redu_iva = $rst_iva->con_valor;
+			$por_iva = $rst_iva->con_valor2;
+			$cod_iva = $rst_iva->con_valor3;
+
+			$iva=  $this->nota_credito_model->lista_detalle_iva($id);
+			
+
+			if (empty($iva)) {
+				if($redu_iva==0){          
+					$t_iva= $por_iva;
+				}else{
+					$t_iva= 12;
+				}
+			} else {
+				$t_iva = $iva->iva;
+			}
+
 			foreach ($cns_dt as $rst_dt) {
 	        
 			$dt_det=(object) array(
@@ -1106,6 +1151,7 @@ class Nota_credito extends CI_Controller {
 						'cancelar'=>base_url().strtolower($rst_opc->opc_direccion).$rst_opc->opc_id,
 						'nota'=>$this->nota_credito_model->lista_una_nota($id),
 						'cns_det'=>$cns_det,
+						'iva'=>$t_iva
 						);
 			$this->html2pdf->filename('nota_credito.pdf');
 			$this->html2pdf->paper('a4', 'portrait');
@@ -1153,6 +1199,26 @@ class Nota_credito extends CI_Controller {
 		$cns=$this->factura_model->lista_detalle_factura($id);
 		$n=0;
 		$detalle='';
+		
+		$rst_iva = $this->configuracion_model->lista_una_configuracion('30');
+
+		$redu_iva = $rst_iva->con_valor;
+		$por_iva = $rst_iva->con_valor2;
+		$cod_iva = $rst_iva->con_valor3;
+
+		$iva = $this->factura_model->lista_impuesto_detalle_factura($id);
+		
+
+		if (empty($iva)) {
+			if($redu_iva==0){          
+				$t_iva= $por_iva;
+			}else{
+				$t_iva= 12;
+			}
+		} else {
+			$t_iva = $iva->iva;
+		}
+		
 		foreach ($cns as $rst_det) {
 			$n++;
 				if ($inven == 0) {
@@ -1281,6 +1347,7 @@ class Nota_credito extends CI_Controller {
 						'detalle'=>$detalle,
 						'cnt_detalle'=>$n,
 						'saldo'=>$saldo,
+						'iva'=>$t_iva,
 						);	
 
 		echo json_encode($data);
@@ -1349,6 +1416,7 @@ class Nota_credito extends CI_Controller {
     function generar_xml($id,$d){
     	$amb=$this->configuracion_model->lista_una_configuracion('5');
 	    $ambiente=$amb->con_valor;
+		$iva=  $this->nota_credito_model->lista_detalle_iva($id);
     	if($ambiente!=0){
     	$xml="";    
     	$progr=$this->configuracion_model->lista_una_configuracion('15');
@@ -1430,17 +1498,48 @@ class Nota_credito extends CI_Controller {
 
 	    $base = 0;
 
-	    if ($nota->ncr_subtotal12 != 0) {
-	        $codPorc = 2;
-	        $base = $nota->ncr_subtotal12;
-	        $valo_iva = round($base * 12 / 100, $round);
-	        $xml.="<totalImpuesto>" . chr(13);
-	        $xml.="<codigo>2</codigo>" . chr(13); //Tipo de Impuesto
-	        $xml.="<codigoPorcentaje>" . $codPorc . "</codigoPorcentaje>" . chr(13); //Codigo del
-	        $xml.="<baseImponible>" . round($base, $round) . "</baseImponible>" . chr(13);
-	        $xml.="<valor>" . $valo_iva . "</valor>" . chr(13);
-	        $xml.="</totalImpuesto>" . chr(13);
-	    }
+	    // if ($nota->ncr_subtotal12 != 0) {
+	    //     $codPorc = 2;
+	    //     $base = $nota->ncr_subtotal12;
+	    //     $valo_iva = round($base * 12 / 100, $round);
+	    //     $xml.="<totalImpuesto>" . chr(13);
+	    //     $xml.="<codigo>2</codigo>" . chr(13); //Tipo de Impuesto
+	    //     $xml.="<codigoPorcentaje>" . $codPorc . "</codigoPorcentaje>" . chr(13); //Codigo del
+	    //     $xml.="<baseImponible>" . round($base, $round) . "</baseImponible>" . chr(13);
+	    //     $xml.="<valor>" . $valo_iva . "</valor>" . chr(13);
+	    //     $xml.="</totalImpuesto>" . chr(13);
+	    // }
+
+		
+		if ($nota->ncr_subtotal12 != 0) {
+
+            $iv_temp = $iva->iva;
+            switch ($iv_temp) {
+
+            case '8':
+            $coPorc = 8;
+            break;
+
+            case '12':
+            $coPorc = 2;
+            break;
+
+            case '14':
+            $coPorc = 3;
+            break;
+
+            }
+
+            $base = $nota->ncr_subtotal12;
+            $valo_iva = round($base * $iv_temp / 100, $round);
+            $xml.="<totalImpuesto>" . chr(13);
+                $xml.="<codigo>2</codigo>" . chr(13); //Tipo de Impuesto
+                $xml.="<codigoPorcentaje>" . $coPorc . "</codigoPorcentaje>" . chr(13); //Codigo del
+                $xml.="<baseImponible>" . round($base, $round) . "</baseImponible>" . chr(13);
+                $xml.="<valor>" . $valo_iva . "</valor>" . chr(13);
+                $xml.="</totalImpuesto>" . chr(13);
+            }
+
 	    if ($nota->ncr_subtotal0 != 0) {
 	        $codPorc = 0;
 	        $base = $nota->ncr_subtotal0;
@@ -1493,11 +1592,36 @@ class Nota_credito extends CI_Controller {
 	        $xml.="<impuestos>" . chr(13);
 	        $xml.="<impuesto>" . chr(13);
 	        $xml.="<codigo>2</codigo>" . chr(13);
-	        if ($det->dnc_iva == '12') {
-	            $codPorc = 2;
-	            $valo_iva = round($det->dnc_precio_total * 12 / 100, $round);
-	            $tarifa = 12;
-	        } else if ($det->dnc_iva == '0') {
+	        // if ($det->dnc_iva == '12') {
+	        //     $codPorc = 2;
+	        //     $valo_iva = round($det->dnc_precio_total * 12 / 100, $round);
+	        //     $tarifa = 12;
+	        // }
+
+			$codPorc = '';
+			if ($det->dnc_iva != '0' && $det->dnc_iva != 'EX' && $det->dnc_iva != 'NO') {
+			///iva 12% -- 13% -- 8%, etc
+			$iva_temp = $det->dnc_iva;
+			$tarifa = $iva_temp;
+			switch ($iva_temp) {
+
+			case '8':
+			$codPorc = 8;
+			break;
+
+			case '12':
+			$codPorc = 2;
+			break;
+
+			case '14':
+			$codPorc = 3;
+			break;
+
+			}
+			$valo_iva = round($det->dnc_precio_total * $iva_temp / 100, $round);
+			}
+			
+			else if ($det->dnc_iva == '0') {
 	            $codPorc = 0;
 	            $valo_iva = 0.00;
 	            $tarifa = 0;

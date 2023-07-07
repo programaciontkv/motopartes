@@ -2878,8 +2878,7 @@ $xml.="<factura version='1.1.0' id='comprobante'>" . chr(13);
 			    $xml.="<totalImpuesto>" . chr(13);
                 $xml.="<codigo>2</codigo>" . chr(13);
                 $xml.="<codigoPorcentaje>$coPorc</codigoPorcentaje>" . chr(13);
-                $xml.="<baseImponible>" . round($factura->fac_subtotal12 + $factura->fac_total_ice,$round) . "
-                </baseImponible>" . chr(13);
+                $xml.="<baseImponible>" . round($factura->fac_subtotal12 + $factura->fac_total_ice,$round) . "</baseImponible>" . chr(13);
                 $xml.="<valor>" . round($factura->fac_total_iva, $round) . "</valor>" . chr(13);
                 $xml.="</totalImpuesto>" . chr(13);
 		}
